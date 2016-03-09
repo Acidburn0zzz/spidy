@@ -1,0 +1,21 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"path": "github.com/jackdanger/collectlinks",
+			"revision": "4840c7d739a3ceaad803cda3841ca2ca29ee7f4b",
+			"revisionTime": "2015-08-03T09:12:15-07:00"
+		},
+		{
+			"path": "golang.org/x/net/html",
+			"revision": "3e5cd1ed149001198e582f9d3f5bfd564cde2896",
+			"revisionTime": "2016-03-08T20:16:50-06:00"
+		},
+		{
+			"path": "golang.org/x/net/html/atom",
+			"revision": "3e5cd1ed149001198e582f9d3f5bfd564cde2896",
+			"revisionTime": "2016-03-08T20:16:50-06:00"
+		}
+	]
+}
