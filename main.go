@@ -5,21 +5,22 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/jackdanger/collectlinks"
 )
 
-// visited is a map for storing visited uri's to avoid visit loops.
-var visited = make(map[string]bool)
-
-// deadLinks provides a lists to contain all failed url links that are
-// considered deadlinks.
-var deadLinks []string
-
 // httpClient to provide http requests abilities.
-var httpClient http.Client
+var httpClient = http.Client{
+	Timeout: 30 * time.Second,
+}
+
+type linkReport struct {
+	Link   string
+	Status int
+}
 
 func main() {
 	flag.Usage = func() {
@@ -48,143 +49,132 @@ Usage:
 
 	flag.Parse()
 
-	queue := make(chan string)
-
 	if *hostOnly {
 		fmt.Printf("Crawling URL[%s]\n", *link)
 	} else {
 		fmt.Printf("Crawling All Links in URL[%s]\n", *link)
 	}
 
-	// Go routine puts url flag into channel for queuing.
-	go func() {
-		queue <- *link
-	}()
-
-	hostURL, err := url.Parse(*link)
+	path, err := url.Parse(*link)
 	if err != nil {
+		fmt.Printf("Error: Unparsable URI: %s\n", *link)
+		os.Exit(-1)
 		return
 	}
 
+	// deadLinks provides a lists to contain all failed url links that are
+	// considered deadlinks.
+	var deadLinks []*linkReport
+
+	dead := collectFrom(path, !*hostOnly)
+
 	for {
 		select {
-		case uri, ok := <-queue:
+		case link, ok := <-dead:
 			if !ok {
+				fmt.Println("--------------------DEAD LINKS------------------------------")
+
+				if len(deadLinks) > 0 {
+					for _, f := range deadLinks {
+						fmt.Printf(`
+			URL: %s
+			Status Code: %d
+
+			`, f.Link, f.Status)
+					}
+				} else {
+					fmt.Println("No Dead Links Found! Woot!")
+				}
+
+				fmt.Println("------------------------------------------------------------")
+				os.Exit(-1)
 				return
 			}
 
-			queueLinks(hostURL.Host, uri, queue, *hostOnly)
-
-		case <-time.After(1 * time.Minute):
-			fmt.Println("Ending crawler. Goodbye!")
-			fmt.Println("--------------------DEAD LINKS------------------------------")
-
-			for _, f := range deadLinks {
-				fmt.Println(f)
-			}
-
-			fmt.Println("------------------------------------------------------------")
-
-			return
+			deadLinks = append(deadLinks, link)
 		}
 	}
 
 }
 
-// queueLinks is used for making http calls to the queued links in queue channel
+// collectFrom uses a recursive function to map out the needed lists of links to.
+// It returns a channel through which the acceptable links can be crawled from.
+func collectFrom(path *url.URL, doExternals bool) <-chan *linkReport {
+	dead := make(chan *linkReport)
 
-func queueLinks(host, uri string, queue chan string, boolflag bool) {
-	if visited[uri] {
-		return
-	}
+	// visited is a map for storing visited uri's to avoid visit loops.
+	visited := make(map[string]bool)
 
-	crawledURL, _ := url.Parse(uri)
+	go func() {
+		defer close(dead)
+		collect(path.String(), path, doExternals, visited, dead)
+	}()
 
-	if boolflag {
-		if !strings.Contains(crawledURL.Host, host) {
-			return
-		}
-	}
+	return dead
+}
 
-	fmt.Printf("Fetching: %s\n", uri)
+func collect(path string, host *url.URL, doExternals bool, visited map[string]bool, dead chan *linkReport) {
 
-	// Store and tag URI as visited.
-	visited[uri] = true
+	// Add to our visited lists.
+	visited[path] = true
 
-	resp, err := httpClient.Get(uri)
+	res, err := httpClient.Get(path)
 	if err != nil {
-		fmt.Printf(`Host: %s
-URI: %s
-Error: %s
-
-`, host, uri, err.Error())
-
-		deadLinks = append(deadLinks, uri)
+		dead <- &linkReport{Link: path, Status: 404}
 		return
 	}
 
-	var failedCodes = []int{
-		http.StatusUnauthorized,
-		http.StatusBadGateway,
-		http.StatusBadRequest,
-		http.StatusUnavailableForLegalReasons,
-		http.StatusUnauthorized,
-		http.StatusServiceUnavailable,
-		http.StatusNotFound,
-		http.StatusForbidden,
-		http.StatusMovedPermanently,
+	defer res.Body.Close()
+
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		dead <- &linkReport{Link: path, Status: res.StatusCode}
+		return
 	}
 
-	for _, failed := range failedCodes {
-		if failed != resp.StatusCode {
+	fmt.Printf(`
+URL: %s
+Status Code: %d
+
+`, path, res.StatusCode)
+
+	for _, link := range collectlinks.All(res.Body) {
+		if visited[link] {
 			continue
 		}
 
-		fmt.Printf(`Host: %s
-URI: %s
-Error: %s
+		// If its a hash based path, then just add it as seen and skip.
+		if strings.HasPrefix(link, "#") {
+			visited[link] = true
+			continue
+		}
 
-`, host, uri, fmt.Sprintf("Response Status Code[%d]", resp.StatusCode))
-
-		deadLinks = append(deadLinks, uri)
-		return
-	}
-
-	fmt.Printf("Status: URL[%s] OK!\n\n", uri)
-
-	defer resp.Body.Close()
-
-	// Collectlinks package helps in parsing a webpage & returning found
-	// hyperlink href.
-	links := collectlinks.All(resp.Body)
-
-	for _, link := range links {
-
-		absolute, err := fixURL(link, uri)
+		pathURI, err := url.Parse(link)
 		if err != nil {
 			continue
 		}
 
-		// Don't queue a uri twice.
-		go func() {
-			queue <- absolute
-		}()
+		// If we are running into the same root link, skip it.
+		if strings.TrimSpace(link) == "/" {
+			continue
+		}
+
+		if !pathURI.IsAbs() {
+			pathURI = host.ResolveReference(pathURI)
+		}
+
+		// If we are are not allowed external links, then check and if not
+		// within host then skip but add it to scene list, we dont, want
+		// to go through the same link twice.
+		if !doExternals && !strings.Contains(pathURI.Host, host.Host) {
+			visited[link] = true
+			continue
+		}
+
+		// Although we have fixed the path, we still need to add it down into the list
+		// of visited.
+		visited[link] = true
+
+		collect(pathURI.String(), host, doExternals, visited, dead)
 	}
-}
 
-// fix url combines the pathname with a base url,returns error if the failed.
-func fixURL(href, base string) (string, error) {
-	uri, err := url.Parse(href)
-	if err != nil {
-		return "", err
-	}
-
-	baseURL, err := url.Parse(base)
-	if err != nil {
-		return "", err
-	}
-
-	uri = baseURL.ResolveReference(uri)
-
-	return uri.String(), err
 }
