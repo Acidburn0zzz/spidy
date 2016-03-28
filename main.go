@@ -154,8 +154,15 @@ func collect(path string, host *url.URL, doExternals bool, visited map[string]bo
 
 	res, err := httpClient.Head(path)
 	if err != nil {
-		// TODO: Won't res be nil when an error is received here, need to confirm.
-		dead <- &linkReport{Link: path, Status: res.StatusCode}
+		// When an erro occurs, we get a nil response, so we have to print this out
+		// and designated this as a failure and a dead link.
+		dead <- &linkReport{Link: path, Status: http.StatusInternalServerError}
+		fmt.Printf(`
+URL: %s
+Status: Failed to get HEAD for path
+Error: %s
+
+`, path, err.Error())
 		return
 	}
 
