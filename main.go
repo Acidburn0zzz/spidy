@@ -154,6 +154,7 @@ func collect(path string, host *url.URL, doExternals bool, visited map[string]bo
 
 	res, err := httpClient.Head(path)
 	if err != nil {
+
 		// When an erro occurs, we get a nil response, so we have to print this out
 		// and designated this as a failure and a dead link.
 		dead <- &linkReport{Link: path, Status: http.StatusInternalServerError}
