@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackdanger/collectlinks"
+	"github.com/PuerkitoBio/goquery"
 )
 
 // httpClient to provide http requests abilities.
@@ -87,6 +87,7 @@ Usage:
 				}
 
 				fmt.Println("------------------------------------------------------------")
+
 				os.Exit(-1)
 				return
 			}
@@ -95,6 +96,39 @@ Usage:
 		}
 	}
 
+}
+
+// farmLinks takes a given url and retrieves the needed links associated with
+// that URL.
+func farmLinks(url string) ([]string, error) {
+	doc, err := goquery.NewDocument(url)
+	if err != nil {
+		return nil, err
+	}
+
+	var links []string
+
+	// Collect all href links within the document. This way we can capture
+	// external,internal and stylesheets within the page.
+	doc.Find("[href]").Each(func(index int, item *goquery.Selection) {
+		href, ok := item.Attr("href")
+		if !ok {
+			return
+		}
+		links = append(links, href)
+	})
+
+	// Collect all src links within the document. This way we can capture
+	// documents and scripts within the page.
+	doc.Find("[src]").Each(func(index int, item *goquery.Selection) {
+		href, ok := item.Attr("href")
+		if !ok {
+			return
+		}
+		links = append(links, href)
+	})
+
+	return links, nil
 }
 
 // collectFrom uses a recursive function to map out the needed lists of links to.
@@ -118,16 +152,29 @@ func collect(path string, host *url.URL, doExternals bool, visited map[string]bo
 	// Add to our visited lists.
 	visited[path] = true
 
-	res, err := httpClient.Get(path)
+	res, err := httpClient.Head(path)
 	if err != nil {
-		dead <- &linkReport{Link: path, Status: 404}
+
+		// When an erro occurs, we get a nil response, so we have to print this out
+		// and designated this as a failure and a dead link.
+		dead <- &linkReport{Link: path, Status: http.StatusInternalServerError}
+		fmt.Printf(`
+URL: %s
+Status: Failed to get HEAD for path
+Error: %s
+
+`, path, err.Error())
 		return
 	}
 
-	defer res.Body.Close()
-
 	if res.StatusCode < 200 || res.StatusCode > 299 {
 		dead <- &linkReport{Link: path, Status: res.StatusCode}
+		return
+	}
+
+	links, err := farmLinks(path)
+	if err != nil {
+		fmt.Printf("Spidy Failed to Farm Links for Page[%s]: Error[%s]\n", path, err.Error())
 		return
 	}
 
@@ -137,7 +184,7 @@ Status Code: %d
 
 `, path, res.StatusCode)
 
-	for _, link := range collectlinks.All(res.Body) {
+	for _, link := range links {
 		if visited[link] {
 			continue
 		}
