@@ -13,6 +13,11 @@
 			"revisionTime": "2015-07-30T10:44:59-07:00"
 		},
 		{
+			"path": "github.com/ardanlabs/kit/pool",
+			"revision": "2a24fa5c88b3a0baeec6b084f21ecbe7469b1950",
+			"revisionTime": "2016-04-01T16:35:29+01:00"
+		},
+		{
 			"path": "github.com/jackdanger/collectlinks",
 			"revision": "4840c7d739a3ceaad803cda3841ca2ca29ee7f4b",
 			"revisionTime": "2015-08-03T09:12:15-07:00"

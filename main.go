@@ -171,7 +171,7 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, dead chan *lin
 	visited := make(map[string]bool)
 	visited[path.String()] = true
 
-	pl.Do("collectFrom", &pathBot{
+	go pl.Do("collectFrom", &pathBot{
 		path:      path.String(),
 		index:     path,
 		dead:      dead,
@@ -289,7 +289,7 @@ func (p *pathBot) Work(context interface{}, id int) {
 			p.wait.Add(1)
 
 			// collect(pathURI.String(), host, doExternals, visited, dead)
-			p.pool.Do(context, &pathBot{
+			go p.pool.Do(context, &pathBot{
 				path:      pathURI.String(),
 				index:     p.index,
 				dead:      p.dead,
