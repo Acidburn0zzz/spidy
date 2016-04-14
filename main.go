@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ardanlabs/kit/cfg"
 	"github.com/ardanlabs/spidy/spidy"
 )
 
@@ -57,23 +58,22 @@ Usage:
 `)
 	}
 
-	var workers = flag.Int("w", 100, "Url to crawl for dead links")
-	var link = flag.String("url", "", "Maximum workers to be used for crawling pages, defaults to 100")
-	var hostOnly = flag.Bool("hostOnly", true, "flag to crawl none base host. Defaults to true")
+	if err := cfg.Init(cfg.EnvProvider{Namespace: "SPIDY"}); err != nil {
+		events.ErrorEvent(context, "main", err, "Configuration Error : Initialization Failed")
+		os.Exit(1)
+	}
 
-	flag.Parse()
+	target := cfg.MustString("TARGET_URL")
+	hostOnly := cfg.MustBool("HOST_ONLY")
 
-	fmt.Printf("Crawler::URL[%s]\n", *link)
-	fmt.Printf("Crawler::Crawl External Links[%t]\n", !*hostOnly)
-	fmt.Printf("Crawler::Workers[%d]\n", *workers)
-
-	if *workers <= 0 {
-		*workers = 100
+	workers, err := cfg.Int("MAX_WORKERS")
+	if err != nil {
+		workers = 100
 	}
 
 	start := time.Now()
 
-	deadlinks, err := spidy.Run(context, *link, !*hostOnly, *workers, events)
+	deadlinks, err := spidy.Run(context, target, hostOnly, workers, events)
 	if err != nil {
 		events.ErrorEvent(context, "main", err, "Completed")
 		os.Exit(1)
