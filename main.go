@@ -64,7 +64,11 @@ Usage:
 	}
 
 	target := cfg.MustString("TARGET_URL")
-	hostOnly := cfg.MustBool("HOST_ONLY")
+
+	allPaths, err := cfg.Bool("EXTERNAL_LINKS")
+	if err != nil {
+		allPaths = false
+	}
 
 	workers, err := cfg.Int("MAX_WORKERS")
 	if err != nil {
@@ -73,7 +77,7 @@ Usage:
 
 	start := time.Now()
 
-	deadlinks, err := spidy.Run(context, target, hostOnly, workers, events)
+	deadlinks, err := spidy.Run(context, target, allPaths, -1, workers, events)
 	if err != nil {
 		events.ErrorEvent(context, "main", err, "Completed")
 		os.Exit(1)
