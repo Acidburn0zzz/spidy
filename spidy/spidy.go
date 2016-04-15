@@ -181,8 +181,6 @@ func (p *pathBot) Work(context interface{}, id int) {
 				return
 			}
 
-			fmt.Printf("Checking Link: %s\n", link)
-			// fmt.Println("Max: %d current: %d\n", p.maxdepths, depths)
 			if p.maxdepths > 0 && int(atomic.LoadInt64(&depths)) > p.maxdepths {
 				return
 			}
@@ -329,8 +327,6 @@ func farmLinks(url string, port chan string) error {
 			return
 		}
 
-		// fmt.Printf("Link: %s\n", href)
-
 		if strings.Contains(href, "javascript:void(0)") {
 			return
 		}
@@ -345,7 +341,7 @@ func farmLinks(url string, port chan string) error {
 
 	go srcs.Each(func(index int, item *goquery.Selection) {
 		defer wg.Done()
-		href, ok := item.Attr("href")
+		href, ok := item.Attr("src")
 		if !ok {
 			return
 		}

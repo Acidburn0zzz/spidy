@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path"
 	"strings"
 	"testing"
 
@@ -42,8 +41,6 @@ func (Events) Event(context interface{}, event string, format string, data ...in
 
 //==============================================================================
 
-// var exts = regexp.MustCompile(".css|.png|.jpg|.js")
-
 // TestSpidy tests the validity of the behaviour of the spidy crawler, using both
 // positive and negative tests to validate the results.
 func TestSpidy(t *testing.T) {
@@ -51,7 +48,6 @@ func TestSpidy(t *testing.T) {
 	{
 
 		server := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
-
 			if req.URL.Path != "/" {
 				if !validPaths[req.URL.Path] {
 					res.WriteHeader(http.StatusNotFound)
@@ -59,28 +55,18 @@ func TestSpidy(t *testing.T) {
 				}
 			}
 
-			ext := path.Ext(req.URL.Path)
-			if ext != "" {
-				res.Header().Set("Content-Type", "application/extension")
-			}
-
 			req.ParseForm()
 			page := strings.TrimSpace(req.FormValue("page"))
 
-			// fmt.Printf("Current Page: %s : %s\n", page, req.URL.Path)
-
-			if page == "badlinks" {
-				res.Write(ardanBadLink)
-				return
-			}
-
-			if page == "badscripts" {
-				// fmt.Println("Sending scripts: ", ardanBadScripts)
+			switch page {
+			case "badscripts":
+				fmt.Println("Sending scripts: ", req.URL)
 				res.Write(ardanBadScripts)
 				return
-			}
-
-			if page == "badimages" {
+			case "badlinks":
+				res.Write(ardanBadLink)
+				return
+			case "badimages":
 				res.Write(ardanBadImages)
 				return
 			}
@@ -93,8 +79,8 @@ func TestSpidy(t *testing.T) {
 		defer server.Close()
 
 		testValidPage(server.URL, t)
-		testInvalidLinks(server.URL, t)
 		testInvalidScripts(server.URL, t)
+		testInvalidLinks(server.URL, t)
 		testInvalidImages(server.URL, t)
 	}
 }

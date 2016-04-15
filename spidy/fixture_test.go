@@ -23,7 +23,7 @@ var ardan = []byte(`
 <meta charset="UTF-8">
 	<title>Ardan Studios</title>
 </head>
-<body style="overflow-x: hidden;" >
+<body>
 
 		<link rel="stylesheet" href="/bootstrap/css/bootstrap.css">
 		<link href="/assets/application-4b77637cc302ef4af6c358864df26f88.css" media="screen" rel="stylesheet" />
@@ -76,7 +76,7 @@ var ardanBadLink = []byte(`
 	<meta charset="UTF-8">
 	<title>Ardan Studios</title>
 </head>
-<body style="overflow-x: hidden;" >
+<body>
 
 		<link rel="stylesheet" href="/bootstrap/css/bootstrap.css">
 		<link href="/maxcdn.bootstrapcdn.com/font-awesome/4.2.0/css/font-awesome.min.css" type="text/css" rel="stylesheet" />
@@ -100,15 +100,12 @@ var ardanBadScripts = []byte(`
 <head>
 <meta charset="UTF-8">
 	<title>Ardan Studios</title>
-	<script src="https://www.youtubemd.com/player_api"></script>
 </head>
-<body style="overflow-x: hidden;" >
-
-		<script src="https://www.youtube.com/player_api"></script>
-		<script src="/assets/application-9709f2e1ad6d5ec24402f59507f6822b.js"></script>
-		<script src="/assets/application-blacksmith.js"></script>
-		<script src="/assets/application-trottle.js.js"></script>
-		<script src="/assets/application-valum.js.js"></script>
-
+<body>
+	<script src="/assets/application-9709f2e1ad6d5ec24402f59507f6822b.js"></script>
+	<script src="/assets/application-blacksmith.js"></script>
+	<script src="/assets/application-trottle.js.js"></script>
+	<script src="/assets/application-valum.js.js"></script>
+	<script src="https://www.youtube.com/player_api"></script>
 </body>
 </html>`)
