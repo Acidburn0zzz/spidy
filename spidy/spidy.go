@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -31,7 +32,7 @@ type LinkReport struct {
 
 // Run evaluates the given urlPath returning possible lists of deadlinks found
 // within the page of the given link else returns a non-nil error if it failed.
-func Run(context interface{}, urlPath string, all bool, workers int, events Events) ([]LinkReport, error) {
+func Run(context interface{}, urlPath string, all bool, workers int, depths int, events Events) ([]LinkReport, error) {
 	events.Event(context, "Run", "Started : URL[%s] : Include Externals[%t] : Workers[%d]", urlPath, all, workers)
 
 	path, err := url.Parse(urlPath)
@@ -46,7 +47,7 @@ func Run(context interface{}, urlPath string, all bool, workers int, events Even
 
 	dead := make(chan LinkReport)
 
-	go collectFrom(path, all, workers, dead, events)
+	go collectFrom(path, all, workers, depths, dead, events)
 
 	for link := range dead {
 		deadLinks = append(deadLinks, link)
@@ -58,12 +59,14 @@ func Run(context interface{}, urlPath string, all bool, workers int, events Even
 
 //==============================================================================
 
+var depths int64
+
 // collectFrom uses a recursive function to map out the needed lists of links to.
 // It returns a channel through which the acceptable links can be crawled from.
-func collectFrom(path *url.URL, doExternals bool, maxWorkers int, dead chan LinkReport, events Events) {
+func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, dead chan LinkReport, events Events) {
 	poolCfg := pool.Config{
 		OptEvent:    pool.OptEvent{Event: events.Event},
-		MinRoutines: func() int { return 30 },
+		MinRoutines: func() int { return 10 },
 		MaxRoutines: func() int { return maxWorkers },
 	}
 
@@ -101,7 +104,7 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, dead chan Link
 	visited := make(map[string]bool)
 	visited[path.String()] = true
 
-	go pl.Do("collectFrom", &pathBot{
+	pl.Do("collectFrom", &pathBot{
 		path:      path.String(),
 		index:     path,
 		dead:      dead,
@@ -111,6 +114,7 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, dead chan Link
 		pool:      pl,
 		externals: doExternals,
 		skipCheck: true,
+		maxdepths: depths,
 	})
 
 	wait.Wait()
@@ -133,6 +137,8 @@ type pathBot struct {
 	index     *url.URL
 	skipCheck bool
 	externals bool
+	maxdepths int
+	cd        int
 }
 
 // Work performs the necessary tasks of validating a link and rescheduling
@@ -171,6 +177,13 @@ func (p *pathBot) Work(context interface{}, id int) {
 			continue
 		case link, ok := <-links:
 			if !ok {
+				atomic.AddInt64(&depths, 1)
+				return
+			}
+
+			fmt.Printf("Checking Link: %s\n", link)
+			// fmt.Println("Max: %d current: %d\n", p.maxdepths, depths)
+			if p.maxdepths > 0 && int(atomic.LoadInt64(&depths)) > p.maxdepths {
 				return
 			}
 
@@ -219,7 +232,7 @@ func (p *pathBot) Work(context interface{}, id int) {
 			p.wait.Add(1)
 
 			// collect(pathURI.String(), host, doExternals, visited, dead)
-			go p.pool.Do(context, &pathBot{
+			p.pool.Do(context, &pathBot{
 				path:      pathURI.String(),
 				index:     p.index,
 				dead:      p.dead,
@@ -228,8 +241,8 @@ func (p *pathBot) Work(context interface{}, id int) {
 				visited:   p.visited,
 				pool:      p.pool,
 				externals: p.externals,
+				maxdepths: p.maxdepths,
 			})
-
 		}
 	}
 
@@ -310,10 +323,13 @@ func farmLinks(url string, port chan string) error {
 
 	go hrefs.Each(func(index int, item *goquery.Selection) {
 		defer wg.Done()
+
 		href, ok := item.Attr("href")
 		if !ok {
 			return
 		}
+
+		// fmt.Printf("Link: %s\n", href)
 
 		if strings.Contains(href, "javascript:void(0)") {
 			return
