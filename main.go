@@ -32,6 +32,11 @@ func (Events) Event(context interface{}, event string, format string, data ...in
 //==============================================================================
 
 func main() {
+	var link = flag.String("url", "", "Target URL for crawling")
+	var wr = flag.Int("w", 100, "Maximum workers to use in crawling")
+	var ap = flag.Bool("externals", false, "flag to crawl none base host. Defaults to true")
+
+	flag.Parse()
 
 	flag.Usage = func() {
 		fmt.Println(`
@@ -62,13 +67,20 @@ Usage:
 	var workers int
 	var allPaths bool
 
-	flag.Parse()
+	if err := cfg.Init(cfg.EnvProvider{Namespace: "SPIDY"}); err == nil {
+		if ta, err := cfg.String("TARGET_URL"); err != nil {
+			target = ta
+		}
 
-	if err := cfg.Init(cfg.EnvProvider{Namespace: "SPIDY"}); err != nil {
+		if ap, err := cfg.Bool("EXTERNAL_LINKS"); err != nil {
+			allPaths = ap
+		}
 
-		wo := flag.Int("w", 100, "Url to crawl for dead links")
-		link := flag.String("url", "", "Maximum workers to be used for crawling pages, defaults to 100")
-		ap := flag.Bool("hostOnly", true, "flag to crawl none base host. Defaults to true")
+		if wo, err := cfg.Int("MAX_WORKERS"); err != nil {
+			workers = wo
+		}
+
+	} else {
 
 		if *link == "" {
 			events.ErrorEvent(context, "main", err, "Configuration Error : Initialization Failed")
@@ -76,27 +88,13 @@ Usage:
 		}
 
 		target = *link
-		workers = *wo
+		workers = *wr
 		allPaths = *ap
-	}
-
-	var err error
-
-	if ta, err := cfg.String("TARGET_URL"); err != nil {
-		target = ta
-	}
-
-	if ap, err := cfg.Bool("EXTERNAL_LINKS"); err != nil {
-		allPaths = ap
-	}
-
-	if wo, err := cfg.Int("MAX_WORKERS"); err != nil {
-		workers = wo
 	}
 
 	start := time.Now()
 
-	deadlinks, err := spidy.Run(context, target, allPaths, -1, workers, events)
+	deadlinks, err := spidy.Run(context, target, allPaths, workers, -1, events)
 	if err != nil {
 		events.ErrorEvent(context, "main", err, "Completed")
 		os.Exit(1)

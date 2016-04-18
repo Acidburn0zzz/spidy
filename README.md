@@ -46,10 +46,8 @@
 	// To crawl the giving url and no external links as well, using 120 workers
 	spidy -url http://golang.org -w 120
 
-	spidy -url http://golang.org -hostOnly true
-
 	// To crawl the giving url and external links as well
-	spidy -url http://golang.org -hostOnly false
+	spidy -url http://golang.org -externals true
 
 
  ```
