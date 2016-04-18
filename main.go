@@ -58,21 +58,40 @@ Usage:
 `)
 	}
 
+	var target string
+	var workers int
+	var allPaths bool
+
+	flag.Parse()
+
 	if err := cfg.Init(cfg.EnvProvider{Namespace: "SPIDY"}); err != nil {
-		events.ErrorEvent(context, "main", err, "Configuration Error : Initialization Failed")
-		os.Exit(1)
+
+		wo := flag.Int("w", 100, "Url to crawl for dead links")
+		link := flag.String("url", "", "Maximum workers to be used for crawling pages, defaults to 100")
+		ap := flag.Bool("hostOnly", true, "flag to crawl none base host. Defaults to true")
+
+		if *link == "" {
+			events.ErrorEvent(context, "main", err, "Configuration Error : Initialization Failed")
+			os.Exit(1)
+		}
+
+		target = *link
+		workers = *wo
+		allPaths = *ap
 	}
 
-	target := cfg.MustString("TARGET_URL")
+	var err error
 
-	allPaths, err := cfg.Bool("EXTERNAL_LINKS")
-	if err != nil {
-		allPaths = false
+	if ta, err := cfg.String("TARGET_URL"); err != nil {
+		target = ta
 	}
 
-	workers, err := cfg.Int("MAX_WORKERS")
-	if err != nil {
-		workers = 100
+	if ap, err := cfg.Bool("EXTERNAL_LINKS"); err != nil {
+		allPaths = ap
+	}
+
+	if wo, err := cfg.Int("MAX_WORKERS"); err != nil {
+		workers = wo
 	}
 
 	start := time.Now()
