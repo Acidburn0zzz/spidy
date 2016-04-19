@@ -84,7 +84,6 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, de
 
 	status, crawleable, err := evaluatePath(path.String())
 	if err != nil {
-		pl.Shutdown("spidy")
 		dead <- LinkReport{Link: path.String(), Status: status, Error: err}
 		close(dead)
 		return
