@@ -72,7 +72,7 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, de
 
 	defer close(dead)
 
-	// create a new pool.
+	// create a new worker pool.
 	pl, err := pool.New("spidy", "collectFrom", poolCfg)
 	if err != nil {
 		fmt.Printf("Spidy failed to create work pool: %s\n", err.Error())
@@ -81,6 +81,8 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, de
 
 	defer pl.Shutdown("spidy")
 
+	// Evalue the giving path and check if its a crawlable endpoint and
+	// if the status meets our criteria.
 	status, crawleable, err := evaluatePath(path.String())
 	if err != nil {
 		dead <- LinkReport{Link: path.String(), Status: status, Error: err}
