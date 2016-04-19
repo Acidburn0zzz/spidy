@@ -76,7 +76,6 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, de
 	pl, err := pool.New("spidy", "collectFrom", poolCfg)
 	if err != nil {
 		fmt.Printf("Spidy failed to create work pool: %s\n", err.Error())
-		close(dead)
 		return
 	}
 
@@ -85,7 +84,6 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, de
 	status, crawleable, err := evaluatePath(path.String())
 	if err != nil {
 		dead <- LinkReport{Link: path.String(), Status: status, Error: err}
-		close(dead)
 		return
 	}
 
