@@ -13,9 +13,34 @@
 			"revisionTime": "2015-07-30T10:44:59-07:00"
 		},
 		{
+			"path": "github.com/ardanlabs/kit/cfg",
+			"revision": "8526568640c57f23301c70e5e02c480cfff3b05f",
+			"revisionTime": "2016-04-01T11:41:43-04:00"
+		},
+		{
+			"path": "github.com/ardanlabs/kit/db",
+			"revision": "8526568640c57f23301c70e5e02c480cfff3b05f",
+			"revisionTime": "2016-04-01T11:41:43-04:00"
+		},
+		{
+			"path": "github.com/ardanlabs/kit/db/mongo",
+			"revision": "8526568640c57f23301c70e5e02c480cfff3b05f",
+			"revisionTime": "2016-04-01T11:41:43-04:00"
+		},
+		{
+			"path": "github.com/ardanlabs/kit/log",
+			"revision": "8526568640c57f23301c70e5e02c480cfff3b05f",
+			"revisionTime": "2016-04-01T11:41:43-04:00"
+		},
+		{
 			"path": "github.com/ardanlabs/kit/pool",
-			"revision": "2a24fa5c88b3a0baeec6b084f21ecbe7469b1950",
-			"revisionTime": "2016-04-01T16:35:29+01:00"
+			"revision": "8526568640c57f23301c70e5e02c480cfff3b05f",
+			"revisionTime": "2016-04-01T11:41:43-04:00"
+		},
+		{
+			"path": "github.com/ardanlabs/kit/tests",
+			"revision": "8526568640c57f23301c70e5e02c480cfff3b05f",
+			"revisionTime": "2016-04-01T11:41:43-04:00"
 		},
 		{
 			"path": "github.com/jackdanger/collectlinks",
@@ -31,6 +56,30 @@
 			"path": "golang.org/x/net/html/atom",
 			"revision": "3e5cd1ed149001198e582f9d3f5bfd564cde2896",
 			"revisionTime": "2016-03-08T20:16:50-06:00"
+		},
+		{
+			"origin": "github.com/ardanlabs/kit/vendor/gopkg.in/mgo.v2",
+			"path": "gopkg.in/mgo.v2",
+			"revision": "8526568640c57f23301c70e5e02c480cfff3b05f",
+			"revisionTime": "2016-04-01T11:41:43-04:00"
+		},
+		{
+			"origin": "github.com/ardanlabs/kit/vendor/gopkg.in/mgo.v2/bson",
+			"path": "gopkg.in/mgo.v2/bson",
+			"revision": "8526568640c57f23301c70e5e02c480cfff3b05f",
+			"revisionTime": "2016-04-01T11:41:43-04:00"
+		},
+		{
+			"origin": "github.com/ardanlabs/kit/vendor/gopkg.in/mgo.v2/internal/sasl",
+			"path": "gopkg.in/mgo.v2/internal/sasl",
+			"revision": "8526568640c57f23301c70e5e02c480cfff3b05f",
+			"revisionTime": "2016-04-01T11:41:43-04:00"
+		},
+		{
+			"origin": "github.com/ardanlabs/kit/vendor/gopkg.in/mgo.v2/internal/scram",
+			"path": "gopkg.in/mgo.v2/internal/scram",
+			"revision": "8526568640c57f23301c70e5e02c480cfff3b05f",
+			"revisionTime": "2016-04-01T11:41:43-04:00"
 		}
 	]
 }
