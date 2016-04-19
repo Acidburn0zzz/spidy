@@ -70,6 +70,8 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, de
 		MaxRoutines: func() int { return maxWorkers },
 	}
 
+	defer close(dead)
+
 	// create a new pool.
 	pl, err := pool.New("spidy", "collectFrom", poolCfg)
 	if err != nil {
@@ -78,6 +80,8 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, de
 		return
 	}
 
+	defer pl.Shutdown("spidy")
+
 	status, crawleable, err := evaluatePath(path.String())
 	if err != nil {
 		pl.Shutdown("spidy")
@@ -85,9 +89,6 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, de
 		close(dead)
 		return
 	}
-
-	defer pl.Shutdown("spidy")
-	defer close(dead)
 
 	if !crawleable {
 		return
