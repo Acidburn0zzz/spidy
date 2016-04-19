@@ -173,8 +173,6 @@ func (p *pathBot) Work(context interface{}, id int) {
 
 	for {
 		select {
-		case <-time.After(time.Second):
-			continue
 		case link, ok := <-links:
 			if !ok {
 				atomic.AddInt64(&depths, 1)
