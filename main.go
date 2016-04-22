@@ -3,10 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/ardanlabs/kit/cfg"
+	"github.com/ardanlabs/kit/log"
 	"github.com/ardanlabs/spidy/spidy"
 )
 
@@ -21,20 +23,25 @@ type Events struct{}
 
 // ErrorEvent logs error message for events.
 func (Events) ErrorEvent(context interface{}, event string, err error, format string, data ...interface{}) {
-	fmt.Printf("Error: %s : %s : %s : %s\n", context, event, err, fmt.Sprintf(format, data...))
+	// fmt.Printf("Error: %s : %s : %s : %s\n", context, event, err, fmt.Sprintf(format, data...))
+	log.Error(context, event, err, format, data...)
 }
 
 // Event logs standard message for events.
 func (Events) Event(context interface{}, event string, format string, data ...interface{}) {
-	fmt.Printf("Event: %s : %s : %s\n", context, event, fmt.Sprintf(format, data...))
+	// fmt.Printf("Event: %s : %s : %s\n", context, event, fmt.Sprintf(format, data...))
+	log.Dev(context, event, format, data...)
 }
 
 //==============================================================================
 
 func main() {
+	log.Init(os.Stdout, func() int { return log.DEV }, log.Ldefault)
+
 	var link = flag.String("url", "", "Target URL for crawling")
-	var wr = flag.Int("w", 100, "Maximum workers to use in crawling")
-	var ap = flag.Bool("externals", false, "flag to crawl none base host. Defaults to true")
+	var workerCount = flag.Int("workers", 100, "Maximum workers to use in crawling")
+	var timeout = flag.Int("timeout", 10000, "Maximum timeout before HEAD requests fails in milliseconds")
+	var doExternals = flag.Bool("externals", false, "flag to crawl none external links. Defaults to true")
 
 	flag.Parse()
 
@@ -52,24 +59,30 @@ Usage:
 
 	// To crawl the giving url and no external links as well
 	spidy -url http://golang.org
-	spidy -url http://golang.org -hostOnly true
+	spidy -url http://golang.org -externals true
 
 	// To crawl the giving url and external links as well
-	spidy -url http://golang.org -hostOnly false
+	spidy -url http://golang.org -externals false
 
-	// To crawl the giving url and set maximum possible workers
-	spidy -url http://golang.org -w 300
+	// To crawl the giving url and set maximum possible workers and a custom timeout
+	// for HEAD requests in milliseconds
+	spidy -url http://golang.org -workers 300 -timeout 300
 
 `)
 	}
 
 	var target string
-	var workers int
 	var allPaths bool
 
+	workers := 100
+	httpTimeout := 10000
+
 	if err := cfg.Init(cfg.EnvProvider{Namespace: "SPIDY"}); err == nil {
-		if ta, err := cfg.String("TARGET_URL"); err != nil {
-			target = ta
+
+		cfg.MustString("TARGET_URL")
+
+		if tm, err := cfg.Int("HTTP_TIMEOUT"); err != nil {
+			httpTimeout = tm
 		}
 
 		if ap, err := cfg.Bool("EXTERNAL_LINKS"); err != nil {
@@ -88,13 +101,24 @@ Usage:
 		}
 
 		target = *link
-		workers = *wr
-		allPaths = *ap
+		workers = *workerCount
+		allPaths = *doExternals
+		httpTimeout = *timeout
 	}
 
 	start := time.Now()
+	ms := time.Duration(httpTimeout) * time.Millisecond
 
-	deadlinks, err := spidy.Run(context, target, allPaths, workers, -1, events)
+	conf := spidy.Config{
+		Client:  &http.Client{Timeout: ms},
+		URL:     target,
+		All:     allPaths,
+		Workers: workers,
+		Depth:   -1,
+		Events:  events,
+	}
+
+	deadlinks, err := spidy.Run(context, &conf)
 	if err != nil {
 		events.ErrorEvent(context, "main", err, "Completed")
 		os.Exit(1)

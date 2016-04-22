@@ -8,7 +8,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
+
+	"golang.org/x/net/html"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/ardanlabs/kit/pool"
@@ -30,14 +31,25 @@ type LinkReport struct {
 	Error  error
 }
 
+// Config defines the configuration through which our crawler defines its running
+// parameters.
+type Config struct {
+	Client  *http.Client
+	URL     string
+	All     bool
+	Workers int
+	Depth   int
+	Events  Events
+}
+
 // Run evaluates the given urlPath returning possible lists of deadlinks found
 // within the page of the given link else returns a non-nil error if it failed.
-func Run(context interface{}, urlPath string, all bool, workers int, depths int, events Events) ([]LinkReport, error) {
-	events.Event(context, "Run", "Started : URL[%s] : Include Externals[%t] : Workers[%d]", urlPath, all, workers)
+func Run(context interface{}, c *Config) ([]LinkReport, error) {
+	c.Events.Event(context, "Run", "Started : URL[%s] : Include Externals[%t] : Workers[%d] : HTTPTimeout[%s]", c.URL, c.All, c.Workers, c.Client.Timeout)
 
-	path, err := url.Parse(urlPath)
+	path, err := url.Parse(c.URL)
 	if err != nil {
-		events.ErrorEvent(context, "Run", err, "Completed")
+		c.Events.ErrorEvent(context, "Run", err, "Completed")
 		return nil, err
 	}
 
@@ -47,13 +59,13 @@ func Run(context interface{}, urlPath string, all bool, workers int, depths int,
 
 	dead := make(chan LinkReport)
 
-	go collectFrom(path, all, workers, depths, dead, events)
+	go collectFrom(c, path, dead)
 
 	for link := range dead {
 		deadLinks = append(deadLinks, link)
 	}
 
-	events.Event(context, "Run", "Completed : Total Dead Links[%d]", len(deadLinks))
+	c.Events.Event(context, "Run", "Completed : Total Dead Links[%d]", len(deadLinks))
 	return deadLinks, nil
 }
 
@@ -63,11 +75,11 @@ var depths int64
 
 // collectFrom uses a recursive function to map out the needed lists of links to.
 // It returns a channel through which the acceptable links can be crawled from.
-func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, dead chan LinkReport, events Events) {
+func collectFrom(c *Config, path *url.URL, dead chan LinkReport) {
 	poolCfg := pool.Config{
-		OptEvent:    pool.OptEvent{Event: events.Event},
+		OptEvent:    pool.OptEvent{Event: c.Events.Event},
 		MinRoutines: func() int { return 10 },
-		MaxRoutines: func() int { return maxWorkers },
+		MaxRoutines: func() int { return c.Workers },
 	}
 
 	defer close(dead)
@@ -83,7 +95,8 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, de
 
 	// Evalue the giving path and check if its a crawlable endpoint and
 	// if the status meets our criteria.
-	status, crawleable, err := evaluatePath(path.String())
+	status, crawleable, err := evaluatePath(path.String(), c)
+	// fmt.Println("First::Evaluate: ", path, " Status: ", status)
 	if err != nil {
 		dead <- LinkReport{Link: path.String(), Status: status, Error: err}
 		return
@@ -105,6 +118,7 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, de
 	visited[path.String()] = true
 
 	pl.Do("collectFrom", &pathBot{
+		config:    c,
 		path:      path.String(),
 		index:     path,
 		dead:      dead,
@@ -112,9 +126,9 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, de
 		vl:        &vl,
 		visited:   visited,
 		pool:      pl,
-		externals: doExternals,
+		externals: c.All,
 		skipCheck: true,
-		maxdepths: depths,
+		maxdepths: c.Depth,
 	})
 
 	wait.Wait()
@@ -130,6 +144,7 @@ func collectFrom(path *url.URL, doExternals bool, maxWorkers int, depths int, de
 type pathBot struct {
 	path      string
 	dead      chan LinkReport
+	config    *Config
 	wait      *sync.WaitGroup
 	vl        *sync.RWMutex
 	visited   map[string]bool
@@ -144,7 +159,6 @@ type pathBot struct {
 // Work performs the necessary tasks of validating a link and rescheduling
 // checks for sublinks.
 func (p *pathBot) Work(context interface{}, id int) {
-	// defer fmt.Printf("Ending task %d -> %s\n", id, p.path)
 	defer p.wait.Done()
 
 	p.vl.Lock()
@@ -152,7 +166,8 @@ func (p *pathBot) Work(context interface{}, id int) {
 	p.vl.Unlock()
 
 	if !p.skipCheck {
-		status, crawleable, err := evaluatePath(p.path)
+		status, crawleable, err := evaluatePath(p.path, p.config)
+		// fmt.Println("Evaluate: ", p.path, " Status: ", status)
 		if err != nil {
 			p.dead <- LinkReport{Link: p.path, Status: status, Error: err}
 			return
@@ -166,7 +181,7 @@ func (p *pathBot) Work(context interface{}, id int) {
 	links := make(chan string)
 
 	if err := farmLinks(p.path, links); err != nil {
-		fmt.Printf("Spidy Failed to Farm Links for Page[%s]: Error[%s]\n", p.path, err.Error())
+		// fmt.Printf("Spidy Failed to Farm Links for Page[%s]: Error[%s]\n", p.path, err.Error())
 		p.dead <- LinkReport{Link: p.path, Status: http.StatusInternalServerError, Error: err}
 		return
 	}
@@ -227,9 +242,11 @@ func (p *pathBot) Work(context interface{}, id int) {
 
 			p.wait.Add(1)
 
-			// collect(pathURI.String(), host, doExternals, visited, dead)
+			// fmt.Println("Collect: ", pathURI.String())
+
 			p.pool.Do(context, &pathBot{
 				path:      pathURI.String(),
+				config:    p.config,
 				index:     p.index,
 				dead:      p.dead,
 				wait:      p.wait,
@@ -246,18 +263,13 @@ func (p *pathBot) Work(context interface{}, id int) {
 
 //==============================================================================
 
-// httpClient to provide http requests abilities.
-var httpClient = http.Client{
-	Timeout: 30 * time.Second,
-}
-
 // evaluatePath evalutes the giving URI path if valid and returns the status,
 // a boolean indicating if its crawlable and a possible error if a failure
 // occured.
-func evaluatePath(path string) (status int, shouldCrawl bool, err error) {
+func evaluatePath(path string, c *Config) (status int, shouldCrawl bool, err error) {
 	var res *http.Response
 
-	res, err = httpClient.Head(path)
+	res, err = c.Client.Head(path)
 	if err != nil {
 
 		// When an erro occurs, we get a nil response, so we have to print this out
@@ -274,17 +286,16 @@ Error: %s
 		return
 	}
 
+	status = res.StatusCode
+	shouldCrawl = false
+
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		status = res.StatusCode
-		err = errors.New("Failed")
-		shouldCrawl = false
+		err = errors.New("Link Failed")
 		return
 	}
 
 	if !strings.Contains(res.Header.Get("Content-Type"), "text/html") {
 		status = res.StatusCode
-		err = nil
-		shouldCrawl = false
 		return
 	}
 
@@ -294,13 +305,22 @@ Status Code: %d
 
 `, path, res.StatusCode)
 
-	status = res.StatusCode
-	err = nil
 	shouldCrawl = true
 	return
 }
 
 //==============================================================================
+
+// getAttr returns the giving attribute for a specific name type if found.
+func getAttr(attrs []html.Attribute, key string) (attr html.Attribute, found bool) {
+	for _, attr = range attrs {
+		if attr.Key == key {
+			found = true
+			return
+		}
+	}
+	return
+}
 
 // farmLinks takes a given url and retrieves the needed links associated with
 // that URL.
@@ -310,50 +330,51 @@ func farmLinks(url string, port chan string) error {
 		return err
 	}
 
-	var wg sync.WaitGroup
-
 	// Collect all href links within the document. This way we can capture
 	// external,internal and stylesheets within the page.
 	hrefs := doc.Find("[href]")
-	wg.Add(hrefs.Length())
-
-	go hrefs.Each(func(index int, item *goquery.Selection) {
-		defer wg.Done()
-
-		href, ok := item.Attr("href")
-		if !ok {
-			return
-		}
-
-		if strings.Contains(href, "javascript:void(0)") {
-			return
-		}
-
-		port <- href
-	})
-
-	// Collect all src links within the document. This way we can capture
-	// documents and scripts within the page.
 	srcs := doc.Find("[src]")
-	wg.Add(srcs.Length())
 
-	go srcs.Each(func(index int, item *goquery.Selection) {
-		defer wg.Done()
-		href, ok := item.Attr("src")
-		if !ok {
-			return
-		}
+	hrefLen := hrefs.Length()
+	srcLen := srcs.Length()
 
-		if strings.Contains(href, "javascript:void(0)") {
-			return
-		}
+	total := hrefLen
 
-		port <- href
-	})
+	if total < srcLen {
+		total = srcLen
+	}
 
 	go func() {
-		wg.Wait()
-		close(port)
+		defer close(port)
+
+		for i := 0; i < total; i++ {
+			if i < hrefLen {
+				item, ok := getAttr(hrefs.Get(i).Attr, "href")
+				if !ok {
+					continue
+				}
+
+				if strings.Contains(item.Val, "javascript:void(0)") {
+					continue
+				}
+
+				port <- item.Val
+			}
+
+			if i < srcLen {
+				item, ok := getAttr(srcs.Get(i).Attr, "src")
+				if !ok {
+					continue
+				}
+
+				if strings.Contains(item.Val, "javascript:void(0)") {
+					continue
+				}
+
+				port <- item.Val
+			}
+		}
+
 	}()
 
 	return nil

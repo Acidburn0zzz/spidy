@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ardanlabs/kit/log"
 	"github.com/ardanlabs/kit/tests"
@@ -18,7 +18,6 @@ import (
 var context = "testing"
 
 func init() {
-	log.Init(os.Stdout, func() int { return log.DEV }, log.Ldefault)
 	tests.Init("")
 }
 
@@ -44,6 +43,9 @@ func (Events) Event(context interface{}, event string, format string, data ...in
 // TestSpidy tests the validity of the behaviour of the spidy crawler, using both
 // positive and negative tests to validate the results.
 func TestSpidy(t *testing.T) {
+	tests.ResetLog()
+	defer tests.DisplayLog()
+
 	t.Logf("Given the need to crawl pages with spidy")
 	{
 
@@ -78,10 +80,19 @@ func TestSpidy(t *testing.T) {
 
 		defer server.Close()
 
-		testValidPage(server.URL, t)
-		testInvalidScripts(server.URL, t)
-		testInvalidLinks(server.URL, t)
-		testInvalidImages(server.URL, t)
+		conf := spidy.Config{
+			Client:  &http.Client{Timeout: time.Duration(30000) * time.Millisecond},
+			URL:     server.URL,
+			All:     false,
+			Workers: 30,
+			Depth:   -1,
+			Events:  events,
+		}
+
+		testValidPage(conf, t)
+		testInvalidScripts(conf, t)
+		testInvalidLinks(conf, t)
+		testInvalidImages(conf, t)
 	}
 }
 
@@ -89,80 +100,80 @@ func TestSpidy(t *testing.T) {
 
 // testValidPage tests a positive path with our spidy crawler and assets all
 // links within the page passes with no exceptions.
-func testValidPage(url string, t *testing.T) {
+func testValidPage(c spidy.Config, t *testing.T) {
 	t.Logf("\tWhen retrieving a page with all valid links")
 	{
 
-		badlinks, err := spidy.Run(context, url, false, 30, -1, events)
+		badlinks, err := spidy.Run(context, &c)
 		if err != nil {
-			t.Fatalf("\t%s\tShould have successfully retrieved page[%s]: %q", tests.Failed, url, err)
+			t.Fatalf("\t%s\tShould have successfully retrieved page[%s]: %q", tests.Failed, c.URL, err)
 		}
-		t.Logf("\t%s\tShould have successfully retrieved page[%s]", tests.Success, url)
+		t.Logf("\t%s\tShould have successfully retrieved page[%s]", tests.Success, c.URL)
 
 		if len(badlinks) > 0 {
-			t.Fatalf("\t%s\tShould have found no deadlinks in page[%s]: %+v", tests.Failed, url, badlinks)
+			t.Fatalf("\t%s\tShould have found no deadlinks in page[%s]: %+v", tests.Failed, c.URL, badlinks)
 		}
-		t.Logf("\t%s\tShould have found no deadlinks in page[%s]", tests.Success, url)
+		t.Logf("\t%s\tShould have found no deadlinks in page[%s]", tests.Success, c.URL)
 
 	}
 }
 
 // testInvalidImages tests all images links within the giving pages and asserts
 // we are able to catch all failing links.
-func testInvalidImages(url string, t *testing.T) {
+func testInvalidImages(c spidy.Config, t *testing.T) {
 	t.Logf("\tWhen retrieving a valid page with invalid images")
 	{
 
-		url = fmt.Sprintf("%s?page=badimages", url)
-		badlinks, err := spidy.Run(context, url, false, 30, -1, events)
+		c.URL = fmt.Sprintf("%s?page=badimages", c.URL)
+		badlinks, err := spidy.Run(context, &c)
 		if err != nil {
-			t.Fatalf("\t%s\tShould have successfully retrieved page[%s]: %q", tests.Failed, url, err)
+			t.Fatalf("\t%s\tShould have successfully retrieved page[%s]: %q", tests.Failed, c.URL, err)
 		}
-		t.Logf("\t%s\tShould have successfully retrieved page[%s]", tests.Success, url)
+		t.Logf("\t%s\tShould have successfully retrieved page[%s]", tests.Success, c.URL)
 
 		if len(badlinks) < 3 {
-			t.Fatalf("\t%s\tShould have found 3 dead image links in page[%s]: %+v", tests.Failed, url, badlinks)
+			t.Fatalf("\t%s\tShould have found 3 dead image links in page[%s]: %+v", tests.Failed, c.URL, badlinks)
 		}
-		t.Logf("\t%s\tShould have found 3 dead image links in page[%s]", tests.Success, url)
+		t.Logf("\t%s\tShould have found 3 dead image links in page[%s]", tests.Success, c.URL)
 
 	}
 }
 
 // testInvalidLinks tests all script/<link> links within the giving pages and asserts
 // we are able to catch all failing links.
-func testInvalidScripts(url string, t *testing.T) {
+func testInvalidScripts(c spidy.Config, t *testing.T) {
 	t.Logf("\tWhen retrieving a valid page with invalid scripts")
 	{
-		url = fmt.Sprintf("%s?page=badscripts", url)
-		badlinks, err := spidy.Run(context, url, false, 30, -1, events)
+		c.URL = fmt.Sprintf("%s?page=badscripts", c.URL)
+		badlinks, err := spidy.Run(context, &c)
 		if err != nil {
-			t.Fatalf("\t%s\tShould have successfully retrieved page[%s]: %q", tests.Failed, url, err)
+			t.Fatalf("\t%s\tShould have successfully retrieved page[%s]: %q", tests.Failed, c.URL, err)
 		}
-		t.Logf("\t%s\tShould have successfully retrieved page[%s]", tests.Success, url)
+		t.Logf("\t%s\tShould have successfully retrieved page[%s]", tests.Success, c.URL)
 
 		if len(badlinks) < 2 {
-			t.Fatalf("\t%s\tShould have found 2 dead script links in page[%s]: %+v", tests.Failed, url, badlinks)
+			t.Fatalf("\t%s\tShould have found 2 dead script links in page[%s]: %+v", tests.Failed, c.URL, badlinks)
 		}
-		t.Logf("\t%s\tShould have found 2 dead script links in page[%s]", tests.Success, url)
+		t.Logf("\t%s\tShould have found 2 dead script links in page[%s]", tests.Success, c.URL)
 	}
 }
 
 // testInvalidLinks tests all href links within the giving pages and asserts
 // we are able to catch all failing links.
-func testInvalidLinks(url string, t *testing.T) {
+func testInvalidLinks(c spidy.Config, t *testing.T) {
 	t.Logf("\tWhen retrieving a valid page with invalid hyperlinks")
 	{
-		url = fmt.Sprintf("%s?page=badlinks", url)
-		badlinks, err := spidy.Run(context, url, false, 30, -1, events)
+		c.URL = fmt.Sprintf("%s?page=badlinks", c.URL)
+		badlinks, err := spidy.Run(context, &c)
 		if err != nil {
-			t.Fatalf("\t%s\tShould have successfully retrieved page[%s]: %q", tests.Failed, url, err)
+			t.Fatalf("\t%s\tShould have successfully retrieved page[%s]: %q", tests.Failed, c.URL, err)
 		}
-		t.Logf("\t%s\tShould have successfully retrieved page[%s]", tests.Success, url)
+		t.Logf("\t%s\tShould have successfully retrieved page[%s]", tests.Success, c.URL)
 
 		if len(badlinks) < 3 {
-			t.Fatalf("\t%s\tShould have found 3 dead links in page[%s]: %+v", tests.Failed, url, badlinks)
+			t.Fatalf("\t%s\tShould have found 3 dead links in page[%s]: %+v", tests.Failed, c.URL, badlinks)
 		}
-		t.Logf("\t%s\tShould have found 3 dead links in page[%s]", tests.Success, url)
+		t.Logf("\t%s\tShould have found 3 dead links in page[%s]", tests.Success, c.URL)
 	}
 }
 
