@@ -17,6 +17,9 @@
   Spidy allows delpoyment of its binary using environment variables
   which sets the target and flags for which the tool will crawl.
 
+  - SPIDY_HTTP_TIMEOUT
+     This sets the maximum timeout for which the client http requests will made with  in milliseconds
+
   - SPIDY_TARGET_URL
      This sets the target URL which the client target for crawling
 
@@ -28,13 +31,11 @@
      This sets the maximum workers to use for its operation.
 
  ```bash
+  > export SPIDY_HTTP_TIMEOUT=30000
   > export SPIDY_MAX_WORKERS=300
   > export SPIDY_TARGET_URL="https://ardanlabs.com"
   > export SPIDY_EXTERNAL_LINKS=false
-
-	> spidy
-
-
+  > spidy
  ```
 
 - CLI
@@ -44,7 +45,7 @@
  ```bash
 
 	// To crawl the giving url and no external links as well, using 120 workers
-	spidy -url http://golang.org -w 120
+	spidy -url http://golang.org -workers 120 -timeout 30000
 
 	// To crawl the giving url and external links as well
 	spidy -url http://golang.org -externals true
