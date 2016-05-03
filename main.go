@@ -140,8 +140,8 @@ Duration: %s
 			fmt.Printf(`
 URL: %s
 Status Code: %d
-
-`, f.Link, f.Status)
+Error: %s
+`, f.Link, f.Status, f.Error)
 		}
 		fmt.Println("------------------------------------------------------------")
 
