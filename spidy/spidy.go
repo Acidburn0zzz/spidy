@@ -115,7 +115,7 @@ func collectFrom(c *Config, path *url.URL, dead chan LinkReport) {
 
 	// visited is a map for storing visited uri's to avoid visit loops.
 	visited := make(map[string]bool)
-	visited[path.String()] = true
+	// visited[path.String()] = true
 
 	pl.Do("collectFrom", &pathBot{
 		config:    c,
@@ -161,13 +161,21 @@ type pathBot struct {
 func (p *pathBot) Work(context interface{}, id int) {
 	defer p.wait.Done()
 
+	// Prefilter checks, if we schedule this path and got resolved then ignore.
+	p.vl.RLock()
+	goOn := p.visited[p.path]
+	p.vl.RUnlock()
+
+	if goOn {
+		return
+	}
+
 	p.vl.Lock()
 	p.visited[p.path] = true
 	p.vl.Unlock()
 
 	if !p.skipCheck {
 		status, crawleable, err := evaluatePath(p.path, p.config)
-		// fmt.Println("Evaluate: ", p.path, " Status: ", status)
 		if err != nil {
 			p.dead <- LinkReport{Link: p.path, Status: status, Error: err}
 			return
@@ -202,6 +210,7 @@ func (p *pathBot) Work(context interface{}, id int) {
 			found := p.visited[link]
 			p.vl.RUnlock()
 
+			// fmt.Printf("Check: %+s %t\n", link, found)
 			if found {
 				continue
 			}
@@ -224,12 +233,22 @@ func (p *pathBot) Work(context interface{}, id int) {
 				continue
 			}
 
+			// fmt.Printf("2ndCheck: %+s %t\n", pathURI.Path, found)
+			p.vl.RLock()
+			ok2 := p.visited[pathURI.Path]
+			p.vl.RUnlock()
+
+			if ok2 {
+				continue
+			}
+
 			// If we are are not allowed external links, then check and if not
 			// within host then skip but add it to scene list, we dont, want
 			// to go through the same link twice.
 			if !p.externals && !strings.Contains(pathURI.Host, p.index.Host) {
 				p.vl.Lock()
 				p.visited[link] = true
+				p.visited[pathURI.Path] = true
 				p.vl.Unlock()
 				continue
 			}
@@ -238,12 +257,19 @@ func (p *pathBot) Work(context interface{}, id int) {
 			// of visited.
 			p.vl.Lock()
 			p.visited[link] = true
+			p.visited[pathURI.Path] = true
 			p.vl.Unlock()
+
+			// To avoid lunching a worker for a non-crawlable link, we need to eval
+			// the link here.
+			_, crawleable, _ := evaluatePath(pathURI.String(), p.config)
+			if !crawleable {
+				continue
+			}
 
 			p.wait.Add(1)
 
-			// fmt.Println("Collect: ", pathURI.String())
-
+			// fmt.Printf("Scheduling: %+s \n", pathURI.Path)
 			p.pool.Do(context, &pathBot{
 				path:      pathURI.String(),
 				config:    p.config,
@@ -282,12 +308,10 @@ Error: %s
 `, path, err.Error())
 
 		status = http.StatusInternalServerError
-		shouldCrawl = false
 		return
 	}
 
 	status = res.StatusCode
-	shouldCrawl = false
 
 	if res.StatusCode < 200 || res.StatusCode > 299 {
 		err = errors.New("Link Failed")
@@ -314,6 +338,7 @@ Status Code: %d
 // getAttr returns the giving attribute for a specific name type if found.
 func getAttr(attrs []html.Attribute, key string) (attr html.Attribute, found bool) {
 	for _, attr = range attrs {
+		// fmt.Printf("Attr: %+s\n", attr)
 		if attr.Key == key {
 			found = true
 			return
